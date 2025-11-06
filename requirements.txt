@@ -1,0 +1,7 @@
+streamlit==1.32.0
+pandas
+opencv-python
+ultralytics
+python-dotenv
+openai
+langchain

@@ -1,7 +1,8 @@
-streamlit==1.32.0
+streamlit
+opencv-python-headless
 pandas
-opencv-python
+numpy
+torch
 ultralytics
-python-dotenv
+pyttsx3
 openai
-langchain

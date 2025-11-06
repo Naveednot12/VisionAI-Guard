@@ -1,42 +1,64 @@
-import threading
-import subprocess
 import os
-from detect import run_yolo_detection
-import cv2
+import threading
+import time
 
-is_detecting = False
 current_frame = None
 latest_detection = None
+detection_thread = None
+running = False
 
-def speak_message(text, enabled=True):
-    if not enabled:
-        return
+# 🧠 Detect if the app runs on Streamlit Cloud (no cv2/ultralytics support)
+is_cloud = os.environ.get("STREAMLIT_RUNTIME") == "true"
+
+# ✅ Safe import logic
+if is_cloud:
+    print("🌐 Running on Streamlit Cloud – loading cloud-safe detection.")
+    from detect_cloud import run_yolo_detection
+else:
     try:
-        if os.name == "nt":
-            subprocess.Popen(["powershell", "-Command", f'Start-SpeechSynthesizer \"{text}\"'])
-        else:
-            subprocess.Popen(["say", text])
-    except Exception:
-        pass
+        from detect import run_yolo_detection
+    except Exception as e:
+        print("⚠️ Local YOLO import failed, using safe fallback:", e)
+        from detect_cloud import run_yolo_detection
 
-def start_detection(callback, voice_enabled=True):
-    global is_detecting, current_frame, latest_detection
-    is_detecting = True
 
-    def detect_loop():
-        global current_frame, latest_detection
-        for frame, detections in run_yolo_detection():
-            if not is_detecting:
-                break
-            if detections:
-                latest_detection = detections[-1]
-                speak_message(f"{detections[-1][0]} detected", voice_enabled)
-            current_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            callback(current_frame, latest_detection)
+def detect_loop(callback=None):
+    global current_frame, latest_detection, running
 
-    thread = threading.Thread(target=detect_loop, daemon=True)
-    thread.start()
+    for frame, detections in run_yolo_detection():
+        if not running:
+            break
+
+        if frame is not None:
+            current_frame = frame
+        if detections:
+            latest_detection = detections[0]
+
+        if callback:
+            callback(frame, detections)
+
+        time.sleep(0.05)
+
+    running = False
+
+
+def start_detection(callback=None, voice_enabled=False):
+    global running, detection_thread
+
+    if running:
+        print("⚠️ Detection is already running.")
+        return
+
+    running = True
+    detection_thread = threading.Thread(target=detect_loop, args=(callback,), daemon=True)
+    detection_thread.start()
+    print("✅ Detection started.")
+
 
 def stop_detection():
-    global is_detecting
-    is_detecting = False
+    global running
+    if running:
+        running = False
+        print("🛑 Detection stopped.")
+    else:
+        print("⚠️ Detection was not running.")

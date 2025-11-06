@@ -5,14 +5,7 @@ import time
 from assistant import query_assistant
 
 # ---------------- ENVIRONMENT DETECTION ----------------
-is_cloud = os.environ.get("STREAMLIT_RUNTIME") == "true"
-
-# Cloud-safe imports
-if is_cloud:
-    from detect_cloud import run_yolo_detection
-    from live_detection import current_frame, latest_detection, start_detection, stop_detection
-else:
-    from live_detection import current_frame, latest_detection, start_detection, stop_detection
+is_cloud = os.environ.get("HOME", "").startswith("/mount")
 
 logs_file = "logs.csv"
 
@@ -36,13 +29,21 @@ if page == "📊 Dashboard":
     st.subheader("📊 Detection Logs")
     if os.path.exists(logs_file):
         df = pd.read_csv(logs_file)
-        st.dataframe(df.tail(300), width="stretch")
+        st.dataframe(df.tail(300), use_container_width=True)
     else:
         st.warning("No detection logs yet. Start detection to generate logs.")
 
 # ---------------- LIVE DETECTION ----------------
 elif page == "🎥 Live Detection":
     st.title("🎥 Real-Time Detection")
+
+    # 🚨 Important note about Streamlit Cloud
+    st.info(
+        "⚠️ **Note:** OpenCV-based live camera detection will not work on Streamlit Cloud "
+        "because it does not allow direct webcam or local device access.\n\n"
+        "👉 To use real-time detection, please run this app locally using the command:\n"
+        "`streamlit run app.py`"
+    )
 
     if is_cloud:
         # 🌐 CLOUD MODE UI
@@ -58,7 +59,6 @@ elif page == "🎥 Live Detection":
             '>
             <h2>🌐 Cloud Mode Active</h2>
             <p>Live camera access is disabled on Streamlit Cloud.</p>
-            <p>To use real-time YOLO detection, please run this app locally.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -70,21 +70,22 @@ elif page == "🎥 Live Detection":
             use_container_width=True,
         )
 
-        st.info("✅ You can still use the Dashboard and AI Assistant features.")
-
     else:
         # 🖥️ LOCAL MODE (Camera available)
-        st.write("Start your camera to run YOLO detection in real time.")
+        from live_detection import current_frame, latest_detection, start_detection, stop_detection
 
-        col1, col2 = st.columns([2, 1])
+        # Create two main columns (left = controls, right = preview)
+        col1, col2 = st.columns([1, 2])
+
+        # LEFT SIDE → Controls and Live Status
         with col1:
-            start_btn = st.button("🟢 Start Detection")
-            stop_btn = st.button("🔴 Stop Detection")
+            st.subheader("🎮 Controls")
+            start_btn = st.button("🟢 Start Detection", use_container_width=True)
+            stop_btn = st.button("🔴 Stop Detection", use_container_width=True)
             st.session_state["voice_enabled"] = st.checkbox(
                 "🔊 Voice Alerts", value=st.session_state["voice_enabled"]
             )
 
-        with col2:
             st.subheader("📡 Live Status")
             if latest_detection:
                 st.success(f"Detected: {latest_detection[0]} | Confidence: {latest_detection[1]:.2f}")
@@ -93,34 +94,36 @@ elif page == "🎥 Live Detection":
             else:
                 st.warning("No detections yet.")
 
-        # Live preview area
-        st.subheader("🎦 Live Camera Preview")
-        preview_placeholder = st.empty()
+        # RIGHT SIDE → Live Camera Preview
+        with col2:
+            st.subheader("🎦 Live Camera Preview")
+            preview_placeholder = st.empty()
 
-        # Start detection
-        if start_btn:
-            start_detection(lambda f, d: None, voice_enabled=st.session_state["voice_enabled"])
-            st.session_state["detection_running"] = True
-            st.success("🟢 Detection started...")
+            # Start detection
+            if start_btn:
+                start_detection(lambda f, d: None, voice_enabled=st.session_state["voice_enabled"])
+                st.session_state["detection_running"] = True
+                st.success("🟢 Detection started...")
 
-        # Stop detection
-        if stop_btn:
-            stop_detection()
-            st.session_state["detection_running"] = False
-            st.warning("🛑 Detection stopped.")
-            preview_placeholder.empty()
+            # Stop detection
+            if stop_btn:
+                stop_detection()
+                st.session_state["detection_running"] = False
+                preview_placeholder.empty()  # ✅ Immediately clear preview
+                st.warning("🛑 Detection stopped.")
 
-        # Refresh loop for real-time preview
-        if st.session_state["detection_running"]:
-            while st.session_state["detection_running"]:
-                if current_frame is not None:
-                    preview_placeholder.image(current_frame, channels="RGB", use_container_width=True)
-                time.sleep(0.1)
-                st.rerun()
-        else:
-            if current_frame is not None:
-                preview_placeholder.image(current_frame, channels="RGB", use_container_width=True)
+            # Continuous refresh for live preview
+            if st.session_state["detection_running"]:
+                while st.session_state["detection_running"]:
+                    if current_frame is not None:
+                        preview_placeholder.image(
+                            current_frame, channels="RGB", use_container_width=True
+                        )
+                    time.sleep(0.1)
+                    st.rerun()
             else:
+                # ✅ Don’t show the last frame after stop
+                preview_placeholder.empty()
                 st.info("Start detection to see live preview here.")
 
 # ---------------- AI ASSISTANT ----------------
@@ -129,7 +132,7 @@ elif page == "💬 AI Assistant":
     st.write("Ask your assistant about today's detections.")
 
     if os.path.exists(logs_file):
-        st.dataframe(pd.read_csv(logs_file).tail(10), width="stretch")
+        st.dataframe(pd.read_csv(logs_file).tail(10), use_container_width=True)
 
     query = st.text_input("Ask a question:", placeholder="e.g., How many persons were detected today?")
     if query:

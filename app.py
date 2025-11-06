@@ -1,18 +1,27 @@
 import streamlit as st
 import pandas as pd
-from live_detection import start_detection, stop_detection, current_frame, latest_detection
-from assistant import query_assistant
 import os
 import time
+from assistant import query_assistant
+
+# 🧠 Import correct detection backend
+is_cloud = os.environ.get("STREAMLIT_RUNTIME") == "true"
+
+if is_cloud:
+    from detect_cloud import run_yolo_detection
+    from live_detection import current_frame, latest_detection, start_detection, stop_detection
+else:
+    from live_detection import current_frame, latest_detection, start_detection, stop_detection
 
 logs_file = "logs.csv"
 
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="VisionAI Guard", layout="wide", page_icon="🧠")
 
 st.sidebar.title("⚙️ Navigation")
 page = st.sidebar.radio("Go to", ["📊 Dashboard", "🎥 Live Detection", "💬 AI Assistant"])
 
-# Shared state
+# ---------------- STATE ----------------
 if "voice_enabled" not in st.session_state:
     st.session_state["voice_enabled"] = True
 if "detection_running" not in st.session_state:
@@ -26,39 +35,37 @@ if page == "📊 Dashboard":
     st.subheader("📊 Detection Logs")
     if os.path.exists(logs_file):
         df = pd.read_csv(logs_file)
-        st.dataframe(df.tail(300), use_container_width=True)
+        st.dataframe(df.tail(300), width="stretch")
     else:
         st.warning("No detection logs yet. Start detection to generate logs.")
-
 
 # ---------------- LIVE DETECTION ----------------
 elif page == "🎥 Live Detection":
     st.title("🎥 Real-Time Detection")
-    st.write("Start your camera to run YOLO detection in real time.")
 
-    # --- Side-by-side layout (Control panel + Live Preview) ---
-    col1, col2 = st.columns([1.2, 2.5])
+    if is_cloud:
+        st.warning("🌐 Cloud Mode Active — Live camera access is disabled on Streamlit Cloud.")
+        st.info("You can view detection logs in the Dashboard tab.")
+        st.image("https://upload.wikimedia.org/wikipedia/commons/1/1d/No_image_available_600_x_450.svg", caption="Camera feed unavailable", use_container_width=True)
+    else:
+        st.write("Start your camera to run YOLO detection in real time.")
 
-    # LEFT: Controls + Status
-    with col1:
-        st.subheader("🎛️ Control Panel")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            start_btn = st.button("🟢 Start Detection")
+            stop_btn = st.button("🔴 Stop Detection")
+            st.session_state["voice_enabled"] = st.checkbox("🔊 Voice Alerts", value=st.session_state["voice_enabled"])
 
-        start_btn = st.button("🟢 Start Detection", use_container_width=True)
-        stop_btn = st.button("🔴 Stop Detection", use_container_width=True)
-        st.session_state["voice_enabled"] = st.checkbox(
-            "🔊 Voice Alerts", value=st.session_state["voice_enabled"]
-        )
+        with col2:
+            st.subheader("📡 Live Status")
+            if latest_detection:
+                st.success(f"Detected: {latest_detection[0]} | Confidence: {latest_detection[1]:.2f}")
+            elif st.session_state["detection_running"]:
+                st.info("Detecting objects...")
+            else:
+                st.warning("No detections yet.")
 
-        st.subheader("📡 Live Status")
-        if latest_detection:
-            st.success(f"Detected: {latest_detection[0]} | Confidence: {latest_detection[1]:.2f}")
-        elif st.session_state["detection_running"]:
-            st.info("Detecting objects...")
-        else:
-            st.warning("No detections yet.")
-
-    # RIGHT: Live Camera Preview
-    with col2:
+        # Live camera preview
         st.subheader("🎦 Live Camera Preview")
         preview_placeholder = st.empty()
 
@@ -72,11 +79,10 @@ elif page == "🎥 Live Detection":
         if stop_btn:
             stop_detection()
             st.session_state["detection_running"] = False
-            preview_placeholder.empty()  # 🔧 clear the preview box instantly
             st.warning("🛑 Detection stopped.")
-            time.sleep(0.5)  # 🔧 small delay to let Streamlit update before rerun
+            preview_placeholder.empty()
 
-        # Continuous refresh for live preview
+        # Continuous refresh
         if st.session_state["detection_running"]:
             while st.session_state["detection_running"]:
                 if current_frame is not None:
@@ -84,9 +90,10 @@ elif page == "🎥 Live Detection":
                 time.sleep(0.1)
                 st.rerun()
         else:
-            # show info only if no preview
-            st.info("Start detection to see live preview here.")
-
+            if current_frame is not None:
+                preview_placeholder.image(current_frame, channels="RGB", use_container_width=True)
+            else:
+                st.info("Start detection to see live preview here.")
 
 # ---------------- AI ASSISTANT ----------------
 elif page == "💬 AI Assistant":
@@ -94,7 +101,7 @@ elif page == "💬 AI Assistant":
     st.write("Ask your assistant about today's detections.")
 
     if os.path.exists(logs_file):
-        st.dataframe(pd.read_csv(logs_file).tail(10), use_container_width=True)
+        st.dataframe(pd.read_csv(logs_file).tail(10), width="stretch")
 
     query = st.text_input("Ask a question:", placeholder="e.g., How many persons were detected today?")
     if query:

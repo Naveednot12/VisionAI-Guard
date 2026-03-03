@@ -45,28 +45,37 @@ elif page == "🎥 Live Detection":
     )
 
     if is_cloud:
-        # 🌐 CLOUD MODE UI
+        # CLOUD MODE UI
         st.markdown(
             """
             <div style='
-                background-color:#333;
+                background-color:#1e1e1e;
+                border:2px solid #444;
                 border-radius:15px;
-                padding:30px;
+                padding:60px 30px;
                 text-align:center;
                 color:white;
                 box-shadow:0 0 20px rgba(0,0,0,0.3);
             '>
             <h2>🌐 Cloud Mode Active</h2>
-            <p>Live camera access is disabled on Streamlit Cloud.</p>
+            <p style='font-size:18px;'>Live camera access is not available on Streamlit Cloud.</p>
+            <p style='color:#aaa;'>To use real-time detection, run this app locally.</p>
+            </div>
+            <br>
+            <div style='
+                background-color:#111;
+                border:2px dashed #555;
+                border-radius:10px;
+                padding:80px 30px;
+                text-align:center;
+                color:#666;
+            '>
+            <h1>📷</h1>
+            <h3>Camera Preview Unavailable</h3>
+            <p>Connect a webcam and run locally to see the live feed here.</p>
             </div>
             """,
             unsafe_allow_html=True,
-        )
-
-        st.image(
-            "https://upload.wikimedia.org/wikipedia/commons/3/3f/CCTV_camera.svg",
-            caption="🛑 CCTV Feed Offline",
-            width="stretch",
         )
 
     else:

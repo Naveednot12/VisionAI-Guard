@@ -4,5 +4,3 @@ pandas
 numpy
 torch
 ultralytics
-pyttsx3
-openai

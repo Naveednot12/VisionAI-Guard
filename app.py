@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-from assistant import query_assistant
 
 # ---------------- ENVIRONMENT DETECTION ----------------
-is_cloud = os.environ.get("HOME", "").startswith("/mount")
+is_cloud = os.environ.get("STREAMLIT_RUNTIME") == "true" or os.environ.get("HOME", "").startswith("/mount")
 
 logs_file = "logs.csv"
 
@@ -13,7 +12,7 @@ logs_file = "logs.csv"
 st.set_page_config(page_title="VisionAI Guard", layout="wide", page_icon="🧠")
 
 st.sidebar.title("⚙️ Navigation")
-page = st.sidebar.radio("Go to", ["📊 Dashboard", "🎥 Live Detection", "💬 AI Assistant"])
+page = st.sidebar.radio("Go to", ["📊 Dashboard", "🎥 Live Detection"])
 
 # ---------------- SESSION STATE ----------------
 if "voice_enabled" not in st.session_state:
@@ -29,7 +28,7 @@ if page == "📊 Dashboard":
     st.subheader("📊 Detection Logs")
     if os.path.exists(logs_file):
         df = pd.read_csv(logs_file)
-        st.dataframe(df.tail(300), use_container_width=True)
+        st.dataframe(df.tail(300), width='stretch')
     else:
         st.warning("No detection logs yet. Start detection to generate logs.")
 
@@ -67,12 +66,12 @@ elif page == "🎥 Live Detection":
         st.image(
             "https://upload.wikimedia.org/wikipedia/commons/3/3f/CCTV_camera.svg",
             caption="🛑 CCTV Feed Offline",
-            use_container_width=True,
+            width="stretch",
         )
 
     else:
         # 🖥️ LOCAL MODE (Camera available)
-        from live_detection import current_frame, latest_detection, start_detection, stop_detection
+        import live_detection
 
         # Create two main columns (left = controls, right = preview)
         col1, col2 = st.columns([1, 2])
@@ -87,8 +86,8 @@ elif page == "🎥 Live Detection":
             )
 
             st.subheader("📡 Live Status")
-            if latest_detection:
-                st.success(f"Detected: {latest_detection[0]} | Confidence: {latest_detection[1]:.2f}")
+            if live_detection.latest_detection:
+                st.success(f"Detected: {live_detection.latest_detection[0]} | Confidence: {live_detection.latest_detection[1]:.2f}")
             elif st.session_state["detection_running"]:
                 st.info("Detecting objects...")
             else:
@@ -101,39 +100,26 @@ elif page == "🎥 Live Detection":
 
             # Start detection
             if start_btn:
-                start_detection(lambda f, d: None, voice_enabled=st.session_state["voice_enabled"])
+                live_detection.start_detection(lambda f, d: None, voice_enabled=st.session_state["voice_enabled"])
                 st.session_state["detection_running"] = True
                 st.success("🟢 Detection started...")
 
             # Stop detection
             if stop_btn:
-                stop_detection()
+                live_detection.stop_detection()
                 st.session_state["detection_running"] = False
                 preview_placeholder.empty()  # ✅ Immediately clear preview
                 st.warning("🛑 Detection stopped.")
 
             # Continuous refresh for live preview
             if st.session_state["detection_running"]:
-                while st.session_state["detection_running"]:
-                    if current_frame is not None:
-                        preview_placeholder.image(
-                            current_frame, channels="RGB", use_container_width=True
-                        )
-                    time.sleep(0.1)
-                    st.rerun()
+                if live_detection.current_frame is not None:
+                    preview_placeholder.image(
+                        live_detection.current_frame, channels="RGB", width="stretch"
+                    )
+                time.sleep(0.15)
+                st.rerun()
             else:
                 # ✅ Don’t show the last frame after stop
                 preview_placeholder.empty()
                 st.info("Start detection to see live preview here.")
-
-# ---------------- AI ASSISTANT ----------------
-elif page == "💬 AI Assistant":
-    st.title("💬 VisionAI Assistant")
-    st.write("Ask your assistant about today's detections.")
-
-    if os.path.exists(logs_file):
-        st.dataframe(pd.read_csv(logs_file).tail(10), use_container_width=True)
-
-    query = st.text_input("Ask a question:", placeholder="e.g., How many persons were detected today?")
-    if query:
-        st.write(query_assistant(query))

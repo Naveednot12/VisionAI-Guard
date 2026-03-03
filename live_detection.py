@@ -1,24 +1,23 @@
 import os
 import threading
-import time
 
 current_frame = None
 latest_detection = None
 detection_thread = None
 running = False
 
-# 🧠 Detect if the app runs on Streamlit Cloud (no cv2/ultralytics support)
+# Detect if the app runs on Streamlit Cloud
 is_cloud = os.environ.get("STREAMLIT_RUNTIME") == "true"
 
-# ✅ Safe import logic
+# Safe import logic
 if is_cloud:
-    print("🌐 Running on Streamlit Cloud – loading cloud-safe detection.")
+    print("Running on Streamlit Cloud - loading cloud-safe detection.")
     from detect_cloud import run_yolo_detection
 else:
     try:
         from detect import run_yolo_detection
     except Exception as e:
-        print("⚠️ Local YOLO import failed, using safe fallback:", e)
+        print("Local YOLO import failed, using safe fallback:", e)
         from detect_cloud import run_yolo_detection
 
 
@@ -37,8 +36,6 @@ def detect_loop(callback=None):
         if callback:
             callback(frame, detections)
 
-        time.sleep(0.05)
-
     running = False
 
 
@@ -46,19 +43,21 @@ def start_detection(callback=None, voice_enabled=False):
     global running, detection_thread
 
     if running:
-        print("⚠️ Detection is already running.")
+        print("Detection is already running.")
         return
 
     running = True
     detection_thread = threading.Thread(target=detect_loop, args=(callback,), daemon=True)
     detection_thread.start()
-    print("✅ Detection started.")
+    print("Detection started.")
 
 
 def stop_detection():
-    global running
+    global running, current_frame, latest_detection
     if running:
         running = False
-        print("🛑 Detection stopped.")
+        current_frame = None
+        latest_detection = None
+        print("Detection stopped.")
     else:
-        print("⚠️ Detection was not running.")
+        print("Detection was not running.")
